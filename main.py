@@ -56,14 +56,18 @@ def chatgpt_response():
 
     answer = response.json()['choices'][0]['message']['content']
 
+    i = 0
     while ' ' in answer:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        print("Answer received: " + response.json()['choices'][0]['message']['content'])
-        answer = response.json()['choices'][0]['message']['content']
+        if i < 3:
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+            print("Answer received: " + response.json()['choices'][0]['message']['content'])
+            answer = response.json()['choices'][0]['message']['content']
+            i += 1
+        else:
+            break
 
     answer = answer.replace('*', '')
     answer = answer.replace('.', '')
-    answer = answer.replace('"', '')
     answer = answer.replace('"', '')
 
     print("Cleaned answer: " + answer)
@@ -192,22 +196,20 @@ def webscrape():
             except:
                 continue
 
-    for test in tr_list:
-        tbody = driver.find_element(By.TAG_NAME, 'tbody')
-        tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
-
-        tr_list = []
-        for tr in tr_elements:
-            tds = tr.find_elements(By.TAG_NAME, 'td')
-            if tds:
-                first_td = tds[0]
-                try:
-                    first_td.find_element(By.TAG_NAME, 'a')
-                    print(tr.text)
-                    tr_list.append(tr)
-                except:
-                    continue
+    for test in range(len(tr_list)):
         try:
+            tbody = driver.find_element(By.TAG_NAME, 'tbody')
+            tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+            for tr in tr_elements:
+                tds = tr.find_elements(By.TAG_NAME, 'td')
+                if tds:
+                    first_td = tds[0]
+                    try:
+                        first_td.find_element(By.TAG_NAME, 'a')
+                        tr_list.append(tr)
+                    except:
+                        continue
+            test = tr_list[test]
             tds = test.find_elements(By.TAG_NAME, 'td')
             first_td = tds[0]
             aelement = first_td.find_element(By.TAG_NAME, 'a')
