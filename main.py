@@ -1,19 +1,65 @@
-import pyautogui
-import openai
+import requests
+import base64
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-def take_screenshot():
-    return
+def encode_image(image_path):
+  with open(image_path, "rb") as image_file:
+    return base64.b64encode(image_file.read()).decode('utf-8')
 
 def chatgpt_response():
-    return
+    api_key = "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"
+
+    base64_image = encode_image("screenshot.png")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    payload = {
+                "model": "gpt-4o",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are an assistant that provides one-word answers from a given word list based on the provided definition.",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Provide a one-word answer from the word list that best fits the definition in the image."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": 
+                                    {
+                                        "url": f"data:image/jpeg;base64,{base64_image}"
+                                    }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 7
+            }
+
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+
+    print("Answer: " + response.json()['choices'][0]['message']['content'])
+
+    answer = response.json()['choices'][0]['message']['content']
+
+    answer = answer.replace('*', '')
+    answer = answer.replace('.', '')
+    answer = answer.replace('"', '')
+    answer = answer.replace("'", '')
+
+    print("Cleaned answer: " + answer)
+    
+    return answer
 
 def webscrape():
     # Setup the webdriver
@@ -130,28 +176,128 @@ def webscrape():
 
     # WE'RE IN HAHAHAHHAHA
 
-    time.sleep(5)
-    # Find the link by id
-    dsat_link = driver.find_element(By.ID, "toplevel_page_dsat_pt")
-    # Click the link
-    dsat_link.click()
+    # Wait for the link by id to be present
+    dsat_link = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "toplevel_page_dsat_pt")))
 
-    # get to the vocab section
-    time.sleep(5)
+    # Create an instance of ActionChains
+    actions = ActionChains(driver)
 
-    # Find the link by href
-    dsat_vocab = driver.find_element(By.CSS_SELECTOR, "a[href='admin.php?page=dsat_vocab&vocab=1']")
-    # Click the link
+    # Hover over the first element
+    actions.move_to_element(dsat_link).perform()
+
+    # Wait for the hover effect to take place and the next element to be clickable
+    dsat_vocab = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='admin.php?page=dsat_vocab&vocab=1']")))
+
+    # Click the second element
     dsat_vocab.click()
 
     # GOT PAST VOCAB PART HAHAHHAHAHAH
 
+    time.sleep(5)
     
+    # find tbody
+    tbody = driver.find_element(By.TAG_NAME, 'tbody')
 
-    time.sleep(100)
+    # Find all tr elements within the tbody
+    tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
+    # Initialize an empty list to store the tr elements
+    tr_list = []
+
+    # Loop through each tr element
+    for tr in tr_elements:
+        tds = tr.find_elements(By.TAG_NAME, 'td')  # Get all td elements within the tr
+        if tds:  # Check if there are any td elements
+            first_td = tds[0]  # Get the first td element
+            try:
+                # Check if the first td element contains an a element
+                first_td.find_element(By.TAG_NAME, 'a')
+                print(tr.text)
+                # If it does, append the tr element to the list
+                tr_list.append(tr)
+            except:
+                # If no a element is found, skip to the next tr element
+                continue
+
+    # now that we got each tr element with the respective tests, we can loop through them to do each one
+    for test in tr_list:
+        tds = test.find_elements(By.TAG_NAME, 'td')  # Get all td elements within the tr
+        first_td = tds[0]  # Get the first td element
+        aelement = first_td.find_element(By.TAG_NAME, 'a')
+        aelement.click() # clicks this
+
+        try:
+            # confirms the test
+            button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "simpleConfirm")))
+            button.click()
+
+            # confirm again
+            yesbutton = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "confirm")))
+            yesbutton.click()
+
+            # in the memorization page 
+            # confirming memorization complete
+            memorybtn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "exam_1_passage_1")))
+            memorybtn.click()
+
+            # Find all elements with the ID "simpleConfirm"
+            elements = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.ID, "simpleConfirm")))
+
+            # Access the second element (index 1, since indexing starts from 0)
+            button = elements[1]
+
+            # I can now interact with the second element
+            # WHY DO THEY HAVE 2 IDS FALSDABFSAF
+            button.click()
+
+            # confirming test ONCE AGAIN
+            yesbutton = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "confirm")))
+            yesbutton.click()
+        except Exception as e:
+            print(e)
+            time.sleep(1000)
+
+        answer_fields = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'vocab_text')))
+        next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
+
+        # LOOP FOR ALL 48 QUESTIONS
+        for i in range(48):
+            try:
+                # Wait for some time between interactions
+                time.sleep(2)
+                driver.save_screenshot('screenshot.png')
+                answer = chatgpt_response()
+
+                # Get the specific element from the list
+                answer_field = answer_fields[i]
+                
+                # Send keys to the input field
+                answer_field.send_keys(answer)
+
+                # Finding next button and clicking it
+                if i < 48:
+                    next_button_div = next_button_divs[i]
+                    next_button = next_button_div.find_element(By.TAG_NAME, "input")
+                    # Ensure the next button is visible and clickable
+                    next_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(next_button))
+                    
+                    # Click the button
+                    next_button.click()
+                if i == 48:
+                    submit_button = driver.find_element(By.CLASS_NAME, "last_save_btn")
+                    # Ensure the next button is visible and clickable
+                    submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(submit_button))
+                    
+                    # Click the button
+                    submit_button.click()
+            except Exception as e:
+                print(e)
+                time.sleep(1000)
+
+        print("Test Complete.")
+        time.sleep(10)
 
 def main():
     webscrape()
-
 
 main()
