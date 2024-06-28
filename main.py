@@ -4,6 +4,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
@@ -101,8 +103,6 @@ def webscrape():
     # Enter the solution into the input field
     input_field.send_keys(str(solution))
 
-    time.sleep(3)
-
     # Submit the form if there's a submit button
     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, 'wp-submit')))
     submit_button.click()
@@ -118,18 +118,37 @@ def webscrape():
     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, 'term_condition_submit')))
     submit_button.click()
 
+    # switch to popup window
+
+    main_window = driver.current_window_handle
+    for handle in driver.window_handles:
+        if handle != main_window:
+            popup_window = handle
+            break
+
+    driver.switch_to.window(popup_window)
+
     # WE'RE IN HAHAHAHHAHA
 
-    # Wait for the new window to open
+    time.sleep(5)
+    # Find the link by id
+    dsat_link = driver.find_element(By.ID, "toplevel_page_dsat_pt")
+    # Click the link
+    dsat_link.click()
+
+    # get to the vocab section
     time.sleep(5)
 
-    # Wait for the submenu to be displayed and the link to be present
-    vocab_link = WebDriverWait(driver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, 'a[href="admin.php?page=dsat_vocab&vocab=1"]')))
-
+    # Find the link by href
+    dsat_vocab = driver.find_element(By.CSS_SELECTOR, "a[href='admin.php?page=dsat_vocab&vocab=1']")
     # Click the link
-    vocab_link.click()
+    dsat_vocab.click()
 
-    # GOT PAST VOCAB PART
+    # GOT PAST VOCAB PART HAHAHHAHAHAH
+
+    
+
+    time.sleep(100)
 
 def main():
     webscrape()
