@@ -223,7 +223,10 @@ def webscrape():
             except:
                 continue
 
-    for iterator in range(len(tr_list)):
+    print(f"Supposed to do test: {tr_list[0].text}")
+
+    iterator = 0
+    while iterator < len(tr_list):
         try:
             test_element = tr_list[iterator]
             tds = test_element.find_elements(By.TAG_NAME, 'td')
@@ -314,19 +317,29 @@ def webscrape():
             time.sleep(5)
         except selenium.common.exceptions.StaleElementReferenceException:
             print("Stale element reference exception encountered. Refreshing elements...")
+            print("Finding tests not done yet...")
             tbody = driver.find_element(By.TAG_NAME, 'tbody')
             tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
             tr_list = []
+
             for tr in tr_elements:
                 tds = tr.find_elements(By.TAG_NAME, 'td')
                 if tds:
                     first_td = tds[0]
                     try:
                         first_td.find_element(By.TAG_NAME, 'a')
+                        print(first_td.text)
                         tr_list.append(tr)
                     except:
                         continue
+
+            print(f"Supposed to do test: {tr_list[0].text}")
             continue
+        
+    print("Tests Finished.")
+    driver.quit()
+
 
 def main():
     webscrape()
