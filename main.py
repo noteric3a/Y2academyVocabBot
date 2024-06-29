@@ -224,8 +224,8 @@ def webscrape():
             except:
                 continue
 
-    print(f"Supposed to do test: {tr_list[0].text}")
-    print(f"Tests Left: {len(tr_list)}")
+    print(f"Supposed to do test: {tr_list[0].text}") if (not tr_list) else None
+    print(f"Tests Left: {len(tr_list)}") if (not tr_list) else None
 
     while tr_list:
         try:
