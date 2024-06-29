@@ -335,7 +335,7 @@ def webscrape():
                     except:
                         continue
 
-            print(f"Supposed to do test: {tr_list[0].text}")
+            print(f"Supposed to do test: {tr_list[0].text}") if (not tr_list) else None
             continue
         
     print("Tests Finished.")
