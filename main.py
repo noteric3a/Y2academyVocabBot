@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
 
 def encode_image(image_path):
     print("Encoding image...")
@@ -73,6 +74,11 @@ def chatgpt_response():
     print("Cleaned answer: " + answer)
     
     return answer
+
+def log_answer(practice_test_name, question_number, answer):
+    file_name = f"{practice_test_name}_answers.txt"
+    with open(file_name, 'a') as file:
+        file.write(f"Question {question_number}: {answer}\n")
 
 def webscrape():
     print("Setting up the webdriver...")
@@ -185,32 +191,23 @@ def webscrape():
     tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
 
     tr_list = []
+
+    print("Finding tests not done yet...")
     for tr in tr_elements:
         tds = tr.find_elements(By.TAG_NAME, 'td')
         if tds:
             first_td = tds[0]
             try:
                 first_td.find_element(By.TAG_NAME, 'a')
-                print(tr.text)
+                print(first_td.text)
                 tr_list.append(tr)
             except:
                 continue
 
     for test in range(len(tr_list)):
         try:
-            tbody = driver.find_element(By.TAG_NAME, 'tbody')
-            tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
-            for tr in tr_elements:
-                tds = tr.find_elements(By.TAG_NAME, 'td')
-                if tds:
-                    first_td = tds[0]
-                    try:
-                        first_td.find_element(By.TAG_NAME, 'a')
-                        tr_list.append(tr)
-                    except:
-                        continue
-            test = tr_list[test]
-            tds = test.find_elements(By.TAG_NAME, 'td')
+            test_element = tr_list[test]
+            tds = test_element.find_elements(By.TAG_NAME, 'td')
             first_td = tds[0]
             aelement = first_td.find_element(By.TAG_NAME, 'a')
             aelement.click()
@@ -238,9 +235,12 @@ def webscrape():
             answer_fields = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'vocab_text')))
             next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
 
-            i = 0
+            
+            test_names = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "test_section_name")))
+            test_name = test_names[1].text
+            print("Doing test: " + test_name)
 
-            while i < len(answer_fields):
+            for i in range(len(answer_fields)):
                 try:
                     print(f"Processing question {i + 1}...")
                     time.sleep(2)
@@ -250,13 +250,14 @@ def webscrape():
                     answer_field = answer_fields[i]
                     answer_field.send_keys(answer)
 
+                    log_answer(test_name, i + 1, answer)
+
                     next_button_div = next_button_divs[i]
                     next_button = next_button_div.find_element(By.TAG_NAME, "input")
                     next_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(next_button))
                     next_button.click()
-                    i += 1
                 except Exception as e:
-                    print(f"Error on question {i + 1}: End of Test")
+                    print(f"Error on question {i + 1}: Finished test?")
                     time.sleep(5)
                     submit_buttons = driver.find_elements(By.NAME, "exam_submit")
                     submit_button = submit_buttons[1]
@@ -288,3 +289,6 @@ def main():
     webscrape()
 
 main()
+
+
+
