@@ -80,6 +80,25 @@ def log_answer(practice_test_name, question_number, answer):
     with open(file_name, 'a') as file:
         file.write(f"Question {question_number}: {answer}\n")
 
+def read_answer(practice_test_name, question_number):
+    filename = f"{practice_test_name}_answers.txt"
+    print(f"Filename: {filename}")
+    print(f"Finding Question: {str(question_number)}")
+    # checking if file exists
+    try:
+        with open(filename, "r+") as file:
+            print("File Found!")
+            for line in file:
+                number, answer = line.strip().split(': ')
+                questionnumber = int(number.split(" ")[1])
+                if questionnumber == question_number:
+                    print(f"Question: {str(questionnumber)}")
+                    return answer
+            return "none"
+    except:
+        return "none"
+
+
 def webscrape():
     print("Setting up the webdriver...")
     driver = webdriver.Chrome()
@@ -204,9 +223,9 @@ def webscrape():
             except:
                 continue
 
-    for test in range(len(tr_list)):
+    for iterator in range(len(tr_list)):
         try:
-            test_element = tr_list[test]
+            test_element = tr_list[iterator]
             tds = test_element.find_elements(By.TAG_NAME, 'td')
             first_td = tds[0]
             aelement = first_td.find_element(By.TAG_NAME, 'a')
@@ -234,28 +253,52 @@ def webscrape():
             print("Starting test...")
             answer_fields = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'vocab_text')))
             next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
-
             
             test_names = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "test_section_name")))
             test_name = test_names[1].text
             print("Doing test: " + test_name)
 
+            # check if there is a file for the test
+            usegpt = False
+            
+            print(f"Does {test_name} have a file?")
+            if read_answer(test_name, 1) == "none":
+                print("Found file.")
+                usegpt = True
+
             for i in range(len(answer_fields)):
                 try:
                     print(f"Processing question {i + 1}...")
-                    time.sleep(2)
+                    time.sleep(0.5)
                     driver.save_screenshot('screenshot.png')
-                    answer = chatgpt_response()
+
+                    # Method to find answers
+                    answer_found = False
+                    print("Finding Answer...")
+                    if not usegpt:
+                        answer = read_answer(test_name, i+1)
+                        if answer == "none":
+                            print("File found, no answer")
+                            answer = chatgpt_response()
+                        else:
+                            print("File found, Answer found.")
+                            answer_found = True
+                    else:
+                        answer = chatgpt_response()
+                    
+                    print(f"Answer: {answer}")
 
                     answer_field = answer_fields[i]
                     answer_field.send_keys(answer)
 
-                    log_answer(test_name, i + 1, answer)
+                    if not answer_found:
+                        log_answer(test_name, i + 1, answer)
 
                     next_button_div = next_button_divs[i]
                     next_button = next_button_div.find_element(By.TAG_NAME, "input")
                     next_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(next_button))
                     next_button.click()
+                    print("Moving on...")
                 except Exception as e:
                     print(f"Error on question {i + 1}: Finished test?")
                     time.sleep(5)
@@ -268,7 +311,7 @@ def webscrape():
                     break
 
             print("Test Complete.")
-            time.sleep(10)
+            time.sleep(5)
         except selenium.common.exceptions.StaleElementReferenceException:
             print("Stale element reference exception encountered. Refreshing elements...")
             tbody = driver.find_element(By.TAG_NAME, 'tbody')
