@@ -1,3 +1,5 @@
 openai
 selenuium
 requests
+os
+json

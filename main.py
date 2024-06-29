@@ -7,7 +7,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import json
 import os
+
+api_key = ""
+username = ""
+password = ""
 
 def encode_image(image_path):
     print("Encoding image...")
@@ -16,7 +21,6 @@ def encode_image(image_path):
 
 def chatgpt_response():
     print("Getting ChatGPT response...")
-    api_key = "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"
 
     base64_image = encode_image("screenshot.png")
 
@@ -105,9 +109,6 @@ def webscrape():
 
     print("Opening the website...")
     driver.get('https://y2academy.org/wp-login.php?redirect_to=https%3A%2F%2Fy2academy.org%2Fwp-admin%2Fadmin.php%3Fpage%3Ddsat_pt%26menu%3D34%26section_test%3D1%26section_id%3D4356&reauth=1')
-
-    username = "pl_eric chung_st"
-    password = "pl0680524chu"
 
     print("Finding username and password fields...")
     username_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'user_login')))
@@ -342,6 +343,22 @@ def webscrape():
 
 
 def main():
+    global api_key
+    global username
+    global password
+
+    with open("config.json", 'r') as file:
+        config = json.load(file)
+
+    api_key = config.get('gptkey', '')
+    username = config.get('username', '')
+    password = config.get('password', '')
+
+    # Print the variables to verify
+    print(f'Username: {username}')
+    print(f'Password: {password}')
+    print(f'GPT Key: {api_key}')
+
     webscrape()
 
 main()
