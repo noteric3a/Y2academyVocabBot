@@ -224,11 +224,11 @@ def webscrape():
                 continue
 
     print(f"Supposed to do test: {tr_list[0].text}")
+    print(f"Tests Left: {len(tr_list)}")
 
-    iterator = 0
-    while iterator < len(tr_list):
+    while tr_list:
         try:
-            test_element = tr_list[iterator]
+            test_element = tr_list[0]
             tds = test_element.find_elements(By.TAG_NAME, 'td')
             first_td = tds[0]
             aelement = first_td.find_element(By.TAG_NAME, 'a')
