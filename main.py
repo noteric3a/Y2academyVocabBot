@@ -225,7 +225,7 @@ def webscrape():
                 continue
 
     print(f"Supposed to do test: {tr_list[0].text}") if (tr_list) else None
-    print(f"Tests Left: {len(tr_list)}") if (tr_list) else None
+    print(f"Tests Left: {len(tr_list)}") if (tr_list) else print("Cant find any!")
 
     while tr_list:
         try:
