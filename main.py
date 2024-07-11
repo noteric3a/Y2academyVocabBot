@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import StaleElementReferenceException
 import time
 import json
 import os
@@ -19,7 +20,7 @@ def encode_image(image_path):
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
-def chatgpt_response():
+def chatgpt_response(input):
     print("Getting ChatGPT response...")
 
     base64_image = encode_image("screenshot.png")
@@ -41,7 +42,7 @@ def chatgpt_response():
                 "content": [
                     {
                         "type": "text",
-                        "text": "Provide a one-word answer from the word list that best fits the definition in the image."
+                        "text": f"{input}"
                     },
                     {
                         "type": "image_url",
@@ -56,60 +57,59 @@ def chatgpt_response():
     }
 
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-
-    print("Answer received: " + response.json()['choices'][0]['message']['content'])
-
     answer = response.json()['choices'][0]['message']['content']
 
     i = 0
     while ' ' in answer:
         if i < 3:
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-            print("Answer received: " + response.json()['choices'][0]['message']['content'])
             answer = response.json()['choices'][0]['message']['content']
             i += 1
         else:
             break
 
-    answer = answer.replace('*', '')
-    answer = answer.replace('.', '')
-    answer = answer.replace('"', '')
-
+    answer = answer.replace('*', '').replace('.', '').replace('"', '')
     print("Cleaned answer: " + answer)
     
     return answer
 
 def log_answer(practice_test_name, question_number, answer):
+    directory = "Vocab"
     file_name = f"{practice_test_name}_answers.txt"
-    with open(file_name, 'a') as file:
+    file_path = os.path.join(directory, file_name)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+    with open(file_path, 'a') as file:
         file.write(f"Question {question_number}: {answer}\n")
 
 def read_answer(practice_test_name, question_number):
-    filename = f"{practice_test_name}_answers.txt"
-    print(f"Filename: {filename}")
-    print(f"Finding Question: {str(question_number)}")
-    # checking if file exists
+    directory = "Vocab"
+    file_name = f"{practice_test_name}_answers.txt"
+    file_path = os.path.join(directory, file_name)
+
     try:
-        with open(filename, "r+") as file:
-            print("File Found!")
+        with open(file_path, "r") as file:
             for line in file:
                 number, answer = line.strip().split(': ')
                 questionnumber = int(number.split(" ")[1])
                 if questionnumber == question_number:
-                    print(f"Question: {str(questionnumber)}")
                     return answer
             return "none"
-    except:
+    except FileNotFoundError:
         return "none"
 
-
-def webscrape():
+def setup_driver():
     print("Setting up the webdriver...")
     driver = webdriver.Chrome()
+    return driver
 
+def open_website(driver):
     print("Opening the website...")
     driver.get('https://y2academy.org/wp-login.php?redirect_to=https%3A%2F%2Fy2academy.org%2Fwp-admin%2Fadmin.php%3Fpage%3Ddsat_pt%26menu%3D34%26section_test%3D1%26section_id%3D4356&reauth=1')
 
+def login(driver, username, password):
     print("Finding username and password fields...")
     username_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'user_login')))
     password_field = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, 'user_pass')))
@@ -118,6 +118,7 @@ def webscrape():
     username_field.send_keys(username) 
     password_field.send_keys(password) 
 
+def solve_captcha(driver):
     print("Filling CAPTCHA...")
     captcha_element = driver.find_element(By.XPATH, "//p[@class='c4wp-display-captcha-form']")
     captcha_text = captcha_element.text
@@ -181,12 +182,20 @@ def webscrape():
 
     print("Logged in successfully!")
 
-    checkbox = driver.find_element(By.NAME, 'term_box')
+def accept_terms_and_conditions(driver):
+    checkbox = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, 'term_box')))
     if not checkbox.is_selected():
         checkbox.click()
 
     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, 'term_condition_submit')))
     submit_button.click()
+
+def vocab():
+    driver = setup_driver()
+    open_website(driver)
+    login(driver, username, password)
+    solve_captcha(driver)
+    accept_terms_and_conditions(driver)
 
     main_window = driver.current_window_handle
     for handle in driver.window_handles:
@@ -283,12 +292,12 @@ def webscrape():
                         answer = read_answer(test_name, i+1)
                         if answer == "none":
                             print("File found, no answer")
-                            answer = chatgpt_response()
+                            answer = chatgpt_response("Provide a one-word answer from the word list that best fits the definition in the image.")
                         else:
                             print("File found, Answer found.")
                             answer_found = True
                     else:
-                        answer = chatgpt_response()
+                        answer = chatgpt_response("Provide a one-word answer from the word list that best fits the definition in the image.")
                     
                     print(f"Answer: {answer}")
 
@@ -341,11 +350,234 @@ def webscrape():
     print("Tests Finished.")
     driver.quit()
 
+def ims():
+    driver = setup_driver()
+    open_website(driver)
+    login(driver, username, password)
+    solve_captcha(driver)
+    accept_terms_and_conditions(driver)
+
+    main_window = driver.current_window_handle
+    for handle in driver.window_handles:
+        if handle != main_window:
+            popup_window = handle
+            break
+
+    driver.switch_to.window(popup_window)
+
+    dsat_link = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "toplevel_page_dsat_pt")))
+    actions = ActionChains(driver)
+    actions.move_to_element(dsat_link).perform()
+
+    dsat_pt = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='admin.php?page=dsat_pt']")))
+    dsat_pt.click()
+
+    print("Navigated to IMS page...")
+    test_iterator = 0
+    while True:
+        # Locate the IMS Board elements
+        datatable = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, 'DataTables_Table_0')))
+        tbody = datatable.find_element(By.TAG_NAME, 'tbody')
+        tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
+        a_element_ims = []
+        for row in tr_elements:
+            tds = row.find_elements(By.TAG_NAME, 'td')
+            for td in tds:
+                if td.text == 'IMS Board':
+                    a_elements = td.find_elements(By.TAG_NAME, 'a')
+                    if a_elements:
+                        a_element_ims.extend(a_elements)
+
+        if not a_element_ims:
+            print("No more IMS Board elements found. Exiting...")
+            break
+
+        try:
+            a_element = a_element_ims.pop(test_iterator)
+            a_element.click()
+            print("In the test section, now iterating through each section to see unfinished.")
+        except IndexError:
+            print("No more IMS Board elements found. Exiting...")
+            break
+
+        # Locate the test sections
+        css_selector = '.imsboard_table.imsview'
+        test_sections = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector)))
+
+        section_iterator = 0
+        while section_iterator < len(test_sections):
+            test_sections_list = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, '.tabs.tabs-style-linebox')))
+            li_elements = WebDriverWait(test_sections_list, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, 'li')))
+            driver.execute_script("arguments[0].click();", li_elements[section_iterator])
+
+            # in the ims test page            
+            test_sections = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector)))
+
+            tbody = test_sections[section_iterator].find_element(By.TAG_NAME, 'tbody')
+            test_tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
+            test_tr_elements_list = []
+            for test_tr_element in test_tr_elements:
+                if "Undone" in test_tr_element.text:
+                    test_tr_elements_list.append(test_tr_element)
+
+            print(f"Doing tests now. {len(test_tr_elements_list)} to go. ")
+
+            # implement logic for doing the questions here
+            while test_tr_elements_list:
+                # we have to implement logic to not do finished ones
+                element = test_tr_elements_list.pop(0)
+                pw = element.find_element(By.CLASS_NAME, "ims_code_link")
+                test_password = pw.text
+
+                print(f"Test password: {test_password}")
+                pw.click()
+
+                button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "simpleConfirm")))
+                button.click()
+
+                yesbutton = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CLASS_NAME, "confirm")))
+                yesbutton.click()
+
+                pw_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "entered_password")))
+                pw_input.send_keys(test_password)
+
+                submit_button = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "test_password_submit")))
+                submit_button.click()
+
+                print("In the test now.")
+
+                multiple_choices = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'check_custom')))
+                next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
+                print(f"Found {len(multiple_choices)} multiple choice and {len(next_button_divs)} buttons")
+
+                for i in range(len(multiple_choices)):
+                    try:
+                        print(f"Processing question {i + 1}...")
+                        time.sleep(0.5)
+                        driver.save_screenshot('screenshot.png')
+
+                        answer = chatgpt_response("Please read the text on the left side of the image and give a 1 letter answer for the question on the right side.")
+                        print(f"Answer: {answer}")
+
+                        # clicking the buttons
+                        multiple_choice_buttons = multiple_choices[i].find_elements(By.TAG_NAME, 'li')
+
+                        if answer == "A":
+                            multiple_choice_buttons[0].click()
+                        if answer == "B":
+                            multiple_choice_buttons[1].click()
+                        if answer == "C":
+                            multiple_choice_buttons[2].click()
+                        else:
+                            multiple_choice_buttons[3].click()
+
+                        next_button_div = next_button_divs[i]
+                        next_button = next_button_div.find_element(By.TAG_NAME, "input")
+                        next_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(next_button))
+                        next_button.click()
+                        print("Moving on...")
+                    except Exception as e:
+                        print(f"Error on question {i + 1}: {e}. Finished test?")
+                        submit_button = driver.find_element(By.CSS_SELECTOR, ".btn.last_save_btn")
+                        submit_button.click()
+
+                        print("Submitting test...")
+                        time.sleep(5)
+                        break
+
+                # submitted the test, now going to main page and back to the tests
+
+                print("Navigating back.")
+                li_element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".wp-first-item.wp-has-submenu.wp-not-current-submenu.menu-top.menu-top-first.menu-icon-dashboard.menu-top-first")))
+                dashboard = li_element.find_element(By.TAG_NAME, 'a')
+
+                dashboard.click()
+                print("Back at dashboard.")
+
+                dsat_link = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "toplevel_page_dsat_pt")))
+                actions.move_to_element(dsat_link).perform()
+
+                dsat_vocab = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='admin.php?page=dsat_pt']")))
+                dsat_vocab.click()
+
+                # Locate the IMS Board elements
+                datatable = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, 'DataTables_Table_0')))
+                tbody = datatable.find_element(By.TAG_NAME, 'tbody')
+                tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
+                a_element_ims2 = []
+
+                # Iterate through each row in tr_elements
+                for row in tr_elements:
+                    tds = row.find_elements(By.TAG_NAME, 'td')
+                    
+                    # Iterate through each td in the row
+                    for td in tds:
+                        if td.text == 'IMS Board':
+                            a_elements2 = td.find_elements(By.TAG_NAME, 'a')
+                            
+                            # Extend a_element_ims2 if a_elements2 is not empty
+                            if a_elements2:
+                                a_element_ims2.extend(a_elements2)
+
+                # Check if a_element_ims2 is empty
+                if not a_element_ims2:
+                    print("No more IMS Board elements found. Exiting...")
+
+                try:
+                    # Iterate through a_element_ims2
+                    a_element2 = a_element_ims2.pop(test_iterator)
+                    a_element2.click()
+                    print("In the test section, now iterating through each section to see unfinished.")
+                except IndexError:
+                    print("No more IMS Board elements found. Exiting...")
+                print("Test Complete.")
+                
+                test_sections_list = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, '.tabs.tabs-style-linebox')))
+                li_elements = WebDriverWait(test_sections_list, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, 'li')))
+                driver.execute_script("arguments[0].click();", li_elements[section_iterator])
+
+                # in the ims test page            
+                test_sections = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector)))
+
+                tbody = test_sections[section_iterator].find_element(By.TAG_NAME, 'tbody')
+                test_tr_elements = tbody.find_elements(By.TAG_NAME, 'tr')
+
+                test_tr_elements_list = []
+                for test_tr_element in test_tr_elements:
+                    if "Undone" in test_tr_element.text:
+                        test_tr_elements_list.append(test_tr_element)
+                
+            section_iterator += 1
+        print("Navigated to IMS page...")
+
+        # going back to dashboard to loop again
+        li_element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, ".wp-first-item.wp-has-submenu.wp-not-current-submenu.menu-top.menu-top-first.menu-icon-dashboard.menu-top-first")))
+        dashboard = li_element.find_element(By.TAG_NAME, 'a')
+        dashboard.click()
+        print("Back at dashboard.")
+
+        dsat_link = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "toplevel_page_dsat_pt")))
+        actions.move_to_element(dsat_link).perform()
+
+        dsat_vocab = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='admin.php?page=dsat_pt']")))
+        dsat_vocab.click()
+        test_iterator += 1
+
+
+    # stops the bot
+    print("Ending, there are no more tests")
+    driver.quit()
+
 
 def main():
     global api_key
     global username
     global password
+
+    mode = input("Options: \n 1. Vocab (V) \n 2. IMS thing (I) \n Enter in an input: \n")
 
     with open("config.json", 'r') as file:
         config = json.load(file)
@@ -358,10 +590,11 @@ def main():
     print(f'Username: {username}')
     print(f'Password: {password}')
     print(f'GPT Key: {api_key}')
+    
+    if mode == "V":
+        vocab()
+    elif mode == "I":
+        ims()
 
-    webscrape()
-
-main()
-
-
-
+if __name__ == "__main__":
+    main()
