@@ -452,6 +452,8 @@ def ims():
                 next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
                 print(f"Found {len(multiple_choices)} multiple choice and {len(next_button_divs)} buttons")
 
+                # so if its not a multiple choice but a weird input thing, it wont detect it.
+
                 for i in range(len(multiple_choices)):
                     try:
                         print(f"Processing question {i + 1}...")
