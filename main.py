@@ -7,6 +7,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
+from PIL import Image
+from io import BytesIO
+import pytesseract
 import time
 import json
 import os
@@ -102,7 +105,7 @@ def read_answer(practice_test_name, question_number):
 
 def setup_driver():
     print("Setting up the webdriver...")
-    driver = webdriver.Chrome()
+    driver = webdriver.Safari()
     return driver
 
 def open_website(driver):
@@ -189,6 +192,43 @@ def accept_terms_and_conditions(driver):
 
     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, 'term_condition_submit')))
     submit_button.click()
+
+def find_answer_via_answerkey(answer_div):
+    try:
+        # finds the answer via this element which should look like this
+        # <strong>The best answer is choice A.</strong>
+        answer_element = answer_div.find_element(By.TAG_NAME, 'strong')
+        answer = answer_element.text
+        return answer[-2]
+    except:
+        try:
+            # finds the answer via image input
+            # looks like this: <img class="alignnone size-full wp-image-106976" src="http://y2academy.org/wp-content/uploads/2017/05/019.png" alt="01" width="327" height="307">
+            img_element = answer_div.find_element(By.TAG_NAME, 'img')
+            img_url = img_element.get_attribute('src')
+            
+            # Download the image
+            response = requests.get(img_url)
+            img = Image.open(BytesIO(response.content))
+            
+            # Use OCR to extract text from the image
+            answer_text = pytesseract.image_to_string(img)
+            
+            # Process the OCR output to find the answer
+            # Assuming the OCR text contains "1. B" or similar format
+            lines = answer_text.split('\n')
+            for line in lines:
+                if '.' in line:
+                    # Extract the part after the dot and space
+                    parts = line.split('.')
+                    if len(parts) > 1:
+                        answer = parts[1].strip()
+                        if len(answer) == 1 and answer.isalpha():
+                            return answer
+            return False
+        except Exception as e:
+            print(f"Error: {e}")
+            return False
 
 def vocab():
     driver = setup_driver()
@@ -357,6 +397,8 @@ def ims():
     solve_captcha(driver)
     accept_terms_and_conditions(driver)
 
+    time.sleep(1)
+
     main_window = driver.current_window_handle
     for handle in driver.window_handles:
         if handle != main_window:
@@ -364,6 +406,7 @@ def ims():
             break
 
     driver.switch_to.window(popup_window)
+    driver.set_window_size(1920, 1080)
 
     dsat_link = WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "toplevel_page_dsat_pt")))
     actions = ActionChains(driver)
@@ -422,7 +465,7 @@ def ims():
                 if "Undone" in test_tr_element.text:
                     test_tr_elements_list.append(test_tr_element)
 
-            print(f"Doing tests now. {len(test_tr_elements_list)} to go. ")
+            print(f"Doing tests now. {len(test_tr_elements_list)} to go. ") if len((test_tr_elements_list)) > 0 else print("No tests in this section...")
 
             # implement logic for doing the questions here
             while test_tr_elements_list:
@@ -448,32 +491,49 @@ def ims():
 
                 print("In the test now.")
 
+                # finding the multiple choices, inputs, and answer keys
+                question_displays = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'question_display')))
                 multiple_choices = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'check_custom')))
                 next_button_divs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "buttons_div")))
-                print(f"Found {len(multiple_choices)} multiple choice and {len(next_button_divs)} buttons")
+                math_inputs = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, "select")))
+                print(f"Found {len(multiple_choices)} multiple choice, {len(next_button_divs)} buttons, and {len(math_inputs)} math inputs")
 
-                # so if its not a multiple choice but a weird input thing, it wont detect it.
+                # answer keys
+                answer_keys = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "ans_explain")))
 
-                for i in range(len(multiple_choices)):
+                for i in range(len(question_displays)):
                     try:
                         print(f"Processing question {i + 1}...")
                         time.sleep(0.5)
+                        # finding the answers
                         driver.save_screenshot('screenshot.png')
 
-                        answer = chatgpt_response("Please read the text on the left side of the image and give a 1 letter answer for the question on the right side.")
-                        print(f"Answer: {answer}")
+                        try:
+                            answer = find_answer_via_answerkey(answer_keys[i])
+                            print(f"Answer: {answer}")
+                        except:
+                            answer = chatgpt_response("Please read the text on the left side of the image and give a 1 letter answer for the question on the right side.")
+                            print(f"Answer: {answer}")
 
                         # clicking the buttons
-                        multiple_choice_buttons = multiple_choices[i].find_elements(By.TAG_NAME, 'li')
+                        try:
+                            multiple_choice_buttons = multiple_choices[i].find_elements(By.TAG_NAME, 'li')
 
-                        if answer == "A":
-                            multiple_choice_buttons[0].click()
-                        if answer == "B":
-                            multiple_choice_buttons[1].click()
-                        if answer == "C":
-                            multiple_choice_buttons[2].click()
-                        else:
-                            multiple_choice_buttons[3].click()
+                            if answer == "A":
+                                multiple_choice_buttons[0].click()
+                            if answer == "B":
+                                multiple_choice_buttons[1].click()
+                            if answer == "C":
+                                multiple_choice_buttons[2].click()
+                            else:
+                                multiple_choice_buttons[3].click()
+                        except:
+                            math_select = math_inputs[i]
+                            math_select_iterator = 0
+                            for char in answer:
+                                # iterating through each number in the answer
+                                math_select[math_select_iterator].select_by_value(char)
+                                math_select_iterator += 1
 
                         next_button_div = next_button_divs[i]
                         next_button = next_button_div.find_element(By.TAG_NAME, "input")
@@ -552,6 +612,7 @@ def ims():
                     if "Undone" in test_tr_element.text:
                         test_tr_elements_list.append(test_tr_element)
                 
+            print("Tests finsihed.")
             section_iterator += 1
         print("Navigated to IMS page...")
 
@@ -567,7 +628,6 @@ def ims():
         dsat_vocab = WebDriverWait(driver, 20).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='admin.php?page=dsat_pt']")))
         dsat_vocab.click()
         test_iterator += 1
-
 
     # stops the bot
     print("Ending, there are no more tests")
