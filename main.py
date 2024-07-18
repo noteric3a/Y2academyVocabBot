@@ -203,11 +203,11 @@ def preprocess_image(image):
     
     # Enhance contrast
     enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(2)
+    image = enhancer.enhance(1)
     
     # Enhance sharpness
     enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(2)
+    image = enhancer.enhance(1)
     
     # Resize the image (optional, can improve OCR accuracy)
     image = image.resize((image.width * 2, image.height * 2), Image.BICUBIC)
@@ -316,17 +316,18 @@ def find_answer_via_answerkey(driver, answer_div):
                     answer_text = pytesseract.image_to_string(image)
                     print(answer_text)
 
-                time.sleep(10000)
+                    lines = answer_text.split('\n')
+                    for c in lines[0]:
+                        if c.lower() in ['a', 'b', 'c', 'd']:
+                            return c.upper()
+                        
+                    # if there is an integer
                 
                 # Process the OCR output to find the answer
                 lines = answer_text.split('\n')
-                for line in lines:
-                    if '.' in line:
-                        parts = line.split('.')
-                        if len(parts) > 1:
-                            answer = parts[1].strip()
-                            if len(answer) == 1 and answer.isalpha():
-                                return answer
+                if '.' in lines[0]:
+                    parts = lines[0].split('.')
+                    return parts[1]
                 return False
             except Exception as e:
                 print(f"Error: {e}")
