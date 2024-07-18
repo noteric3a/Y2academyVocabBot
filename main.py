@@ -7,9 +7,11 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import StaleElementReferenceException
-from PIL import Image
-from io import BytesIO
+from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
+from io import BytesIO
+import cv2
+import numpy as np
 import time
 import json
 import os
@@ -17,6 +19,8 @@ import os
 api_key = ""
 username = ""
 password = ""
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 def encode_image(image_path):
     print("Encoding image...")
@@ -105,7 +109,7 @@ def read_answer(practice_test_name, question_number):
 
 def setup_driver():
     print("Setting up the webdriver...")
-    driver = webdriver.Safari()
+    driver = webdriver.Chrome()
     return driver
 
 def open_website(driver):
@@ -193,42 +197,140 @@ def accept_terms_and_conditions(driver):
     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.NAME, 'term_condition_submit')))
     submit_button.click()
 
-def find_answer_via_answerkey(answer_div):
+def preprocess_image(image):
+    # Convert to grayscale
+    image = image.convert('L')
+    
+    # Enhance contrast
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2)
+    
+    # Enhance sharpness
+    enhancer = ImageEnhance.Sharpness(image)
+    image = enhancer.enhance(2)
+    
+    # Resize the image (optional, can improve OCR accuracy)
+    image = image.resize((image.width * 2, image.height * 2), Image.BICUBIC)
+    
+    return image
+
+def deskew_image(image):
+    # Convert to OpenCV format
+    image_cv = np.array(image)
+    
+    # Ensure the image is in grayscale
+    if len(image_cv.shape) == 3 and image_cv.shape[2] == 3:
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image_cv
+    
+    # Binarize the image
+    _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Find contours and get angle
+    coords = np.column_stack(np.where(binary > 0))
+    angle = cv2.minAreaRect(coords)[-1]
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+    
+    # Rotate the image to deskew
+    (h, w) = image_cv.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(image_cv, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    
+    # Convert back to PIL format
+    deskewed_image = Image.fromarray(rotated)
+    return deskewed_image
+
+def extract_text_from_image(image_path):
+    # Open the image
+    img = Image.open(image_path)
+    
+    # Preprocess the image
+    preprocessed_img = preprocess_image(img)
+    
+    # Deskew the image
+    deskewed_img = deskew_image(preprocessed_img)
+    
+    # Define tesseract configuration
+    custom_config = r'--oem 3 --psm 4'
+    
+    # Use OCR to extract text from the preprocessed image
+    answer_text = pytesseract.image_to_string(deskewed_img, config=custom_config)
+    
+    return answer_text
+
+def find_answer_via_answerkey(driver, answer_div):
+    # Make the answer div visible by changing the display style
+    driver.execute_script("arguments[0].style.display='block';", answer_div)
+
     try:
-        # finds the answer via this element which should look like this
-        # <strong>The best answer is choice A.</strong>
+        # Find the answer via <strong> element
         answer_element = answer_div.find_element(By.TAG_NAME, 'strong')
+        print("Found answer VIA <strong>.")
         answer = answer_element.text
+
+        # Extract the last character and check if it's one of 'a', 'b', 'c', or 'd'
+        if answer[-2].lower() not in ['a', 'b', 'c', 'd']:
+            return answer[7]
+        
         return answer[-2]
     except:
         try:
-            # finds the answer via image input
-            # looks like this: <img class="alignnone size-full wp-image-106976" src="http://y2academy.org/wp-content/uploads/2017/05/019.png" alt="01" width="327" height="307">
-            img_element = answer_div.find_element(By.TAG_NAME, 'img')
-            img_url = img_element.get_attribute('src')
+            answer_element = answer_div.find_element(By.TAG_NAME, 'b')
+            print("Found answer VIA <b>.")
+            answer = answer_element.text
+
+            if answer[-2].lower() not in ['a', 'b', 'c', 'd']:
+                return answer[7]
             
-            # Download the image
-            response = requests.get(img_url)
-            img = Image.open(BytesIO(response.content))
-            
-            # Use OCR to extract text from the image
-            answer_text = pytesseract.image_to_string(img)
-            
-            # Process the OCR output to find the answer
-            # Assuming the OCR text contains "1. B" or similar format
-            lines = answer_text.split('\n')
-            for line in lines:
-                if '.' in line:
-                    # Extract the part after the dot and space
-                    parts = line.split('.')
-                    if len(parts) > 1:
-                        answer = parts[1].strip()
-                        if len(answer) == 1 and answer.isalpha():
-                            return answer
-            return False
-        except Exception as e:
-            print(f"Error: {e}")
-            return False
+            return answer[-2]
+        except:
+            try:
+                # Find the answer via image input
+                img_element = answer_div.find_element(By.TAG_NAME, 'img')
+                print("Found answer VIA <img>.")
+                img_url = img_element.get_attribute('src')
+                
+                # Download the image
+                response = requests.get(img_url)
+                if response.status_code == 200:
+                    image_path = "downloaded_image.jpg"
+                    with open(image_path, 'wb') as file:
+                        file.write(response.content)
+                    print(f"Image downloaded successfully: {image_path}")
+                else:
+                    print("Failed to download image.")
+                    return False
+                
+                # Extract text from image
+                answer_text = extract_text_from_image(image_path)
+                if answer_text == "":
+                    img = Image.open(image_path)
+                    image = preprocess_image(img)
+                    
+                    # Use OCR to extract text from the preprocessed image
+                    answer_text = pytesseract.image_to_string(image)
+                    print(answer_text)
+
+                time.sleep(10000)
+                
+                # Process the OCR output to find the answer
+                lines = answer_text.split('\n')
+                for line in lines:
+                    if '.' in line:
+                        parts = line.split('.')
+                        if len(parts) > 1:
+                            answer = parts[1].strip()
+                            if len(answer) == 1 and answer.isalpha():
+                                return answer
+                return False
+            except Exception as e:
+                print(f"Error: {e}")
+                return False
 
 def vocab():
     driver = setup_driver()
@@ -354,7 +456,7 @@ def vocab():
                     print("Moving on...")
                 except Exception as e:
                     print(f"Error on question {i + 1}: Finished test?")
-                    time.sleep(5)
+                    time.sleep(500000)
                     submit_buttons = driver.find_elements(By.NAME, "exam_submit")
                     submit_button = submit_buttons[1]
                     submit_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(submit_button))
@@ -500,6 +602,7 @@ def ims():
 
                 # answer keys
                 answer_keys = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, "ans_explain")))
+                print(f"Length of answer key list: {str(len(answer_keys))}")
 
                 for i in range(len(question_displays)):
                     try:
@@ -509,7 +612,7 @@ def ims():
                         driver.save_screenshot('screenshot.png')
 
                         try:
-                            answer = find_answer_via_answerkey(answer_keys[i])
+                            answer = find_answer_via_answerkey(driver, answer_keys[i])
                             print(f"Answer: {answer}")
                         except:
                             answer = chatgpt_response("Please read the text on the left side of the image and give a 1 letter answer for the question on the right side.")
@@ -521,9 +624,9 @@ def ims():
 
                             if answer == "A":
                                 multiple_choice_buttons[0].click()
-                            if answer == "B":
+                            elif answer == "B":
                                 multiple_choice_buttons[1].click()
-                            if answer == "C":
+                            elif answer == "C":
                                 multiple_choice_buttons[2].click()
                             else:
                                 multiple_choice_buttons[3].click()
@@ -546,7 +649,6 @@ def ims():
                         submit_button.click()
 
                         print("Submitting test...")
-                        time.sleep(5)
                         break
 
                 # submitted the test, now going to main page and back to the tests
