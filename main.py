@@ -275,6 +275,8 @@ def find_answer_via_answerkey(driver, answer_div):
 
         # Extract the last character and check if it's one of 'a', 'b', 'c', or 'd'
         if answer[-2].lower() not in ['a', 'b', 'c', 'd']:
+            if answer[7].lower() not in ['a', 'b', 'c', 'd']:
+                return answer[-1]
             return answer[7]
         
         return answer[-2]
@@ -284,54 +286,71 @@ def find_answer_via_answerkey(driver, answer_div):
             print("Found answer VIA <b>.")
             answer = answer_element.text
 
+            # Extract the last character and check if it's one of 'a', 'b', 'c', or 'd'
             if answer[-2].lower() not in ['a', 'b', 'c', 'd']:
+                if answer[7].lower() not in ['a', 'b', 'c', 'd']:
+                    return answer[-1]
                 return answer[7]
             
             return answer[-2]
         except:
             try:
-                # Find the answer via image input
-                img_element = answer_div.find_element(By.TAG_NAME, 'img')
-                print("Found answer VIA <img>.")
-                img_url = img_element.get_attribute('src')
-                
-                # Download the image
-                response = requests.get(img_url)
-                if response.status_code == 200:
-                    image_path = "downloaded_image.jpg"
-                    with open(image_path, 'wb') as file:
-                        file.write(response.content)
-                    print(f"Image downloaded successfully: {image_path}")
-                else:
-                    print("Failed to download image.")
-                    return False
-                
-                # Extract text from image
-                answer_text = extract_text_from_image(image_path)
-                if answer_text == "":
-                    img = Image.open(image_path)
-                    image = preprocess_image(img)
-                    
-                    # Use OCR to extract text from the preprocessed image
-                    answer_text = pytesseract.image_to_string(image)
-                    print(answer_text)
+                # Find the answer via <span> element
+                answer_element = answer_div.find_element(By.TAG_NAME, 'span')
+                print("Found answer VIA <span>.")
+                answer = answer_element.text
 
-                    lines = answer_text.split('\n')
-                    for c in lines[0]:
-                        if c.lower() in ['a', 'b', 'c', 'd']:
-                            return c.upper()
-                        
-                    # if there is an integer
+                # Extract the last character and check if it's one of 'a', 'b', 'c', or 'd'
+                if answer[-2].lower() not in ['a', 'b', 'c', 'd']:
+                    if answer[7].lower() not in ['a', 'b', 'c', 'd']:
+                        return answer[-1]
+                    return answer[7]
                 
-                # Process the OCR output to find the answer
-                lines = answer_text.split('\n')
-                if '.' in lines[0]:
-                    parts = lines[0].split('.')
-                    return parts[1]
-                return False
-            except Exception as e:
-                print(f"Error: {e}")
-                return False
+                return answer[-2]
+            except:
+                try:
+                    # Find the answer via image input
+                    img_element = answer_div.find_element(By.TAG_NAME, 'img')
+                    print("Found answer VIA <img>.")
+                    img_url = img_element.get_attribute('src')
+                    
+                    # Download the image
+                    response = requests.get(img_url)
+                    if response.status_code == 200:
+                        image_path = "downloaded_image.jpg"
+                        with open(image_path, 'wb') as file:
+                            file.write(response.content)
+                        print(f"Image downloaded successfully: {image_path}")
+                    else:
+                        print("Failed to download image.")
+                        return False
+                    
+                    # Extract text from image
+                    answer_text = extract_text_from_image(image_path)
+                    if answer_text == "":
+                        img = Image.open(image_path)
+                        image = preprocess_image(img)
+                        
+                        # Use OCR to extract text from the preprocessed image
+                        answer_text = pytesseract.image_to_string(image)
+                        print(answer_text)
+
+                        lines = answer_text.split('\n')
+                        for c in lines[0]:
+                            if c.lower() in ['a', 'b', 'c', 'd']:
+                                return c.upper()
+                            
+                        # if there is an integer
+                    
+                    # Process the OCR output to find the answer
+                    lines = answer_text.split('\n')
+                    if '.' in lines[0]:
+                        parts = lines[0].split('.')
+                        return parts[1]
+                    return False
+                except Exception as e:
+                    print(f"Error: {e}")
+                    return False
 
 def vocab():
     driver = setup_driver()
@@ -552,7 +571,7 @@ def ims():
         test_sections = WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, css_selector)))
 
         section_iterator = 0
-        while section_iterator < len(test_sections):
+        while section_iterator < len(test_sections)-2: # minus 2 to only do english section for now, math is currently unstable
             test_sections_list = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, '.tabs.tabs-style-linebox')))
             li_elements = WebDriverWait(test_sections_list, 10).until(EC.presence_of_all_elements_located((By.TAG_NAME, 'li')))
             driver.execute_script("arguments[0].click();", li_elements[section_iterator])
