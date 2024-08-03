@@ -3,3 +3,5 @@ selenuium
 requests
 os
 json
+pytesseract
+OpenCv-Python
